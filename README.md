@@ -1,0 +1,1 @@
+# shirakawa-village-test-map
