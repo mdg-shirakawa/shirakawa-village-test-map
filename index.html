@@ -5,20 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>白川郷 観光マップ</title>
     
-    <!-- Leaflet CSS (地図表示用ライブラリ) -->
+    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     
-    <!-- Tailwind CSS (デザイン用) -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- FontAwesome (アイコン用) -->
+    <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <style>
-        body { margin: 0; padding: 0; }
-        /* 背景色を白に設定 */
-        #map { height: 100vh; width: 100%; background-color: #ffffff; }
+        body { margin: 0; padding: 0; background-color: #ffffff; overflow: hidden; }
         
+        /* 地図を画面いっぱいに */
+        #map { height: 100vh; width: 100%; background-color: #ffffff; z-index: 1; }
+        
+        /* ポップアップ画像 */
         .popup-image {
             width: 100%;
             height: 120px;
@@ -28,6 +30,7 @@
             background-color: #eee;
         }
 
+        /* マーカーのアニメーション */
         .custom-marker {
             transition: transform 0.2s;
         }
@@ -35,142 +38,415 @@
             transform: scale(1.1);
             z-index: 1000;
         }
+
+        /* リンクボタンのスタイル */
+        .popup-btn {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 4px 12px;
+            background-color: #4f46e5;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 11px;
+            text-align: center;
+        }
+        .popup-btn:hover {
+            background-color: #4338ca;
+        }
+
+        /* 現在地ボタン */
+        #gps-btn {
+            position: absolute;
+            bottom: 30px;
+            right: 20px;
+            z-index: 1000; /* Leafletの上に表示 */
+            background-color: white;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        #gps-btn:active {
+            background-color: #f3f4f6;
+        }
+        
+        /* 現在地マーカー（パルスアニメーション） */
+        .gps-marker-icon {
+            background-color: #3b82f6;
+            border: 2px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+            animation: pulse-blue 2s infinite;
+        }
+        @keyframes pulse-blue {
+            0% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+            }
+            70% {
+                transform: scale(1);
+                box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+            }
+            100% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+            }
+        }
+
+        /* 通知トースト */
+        #toast {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px); /* 初期位置は上部外 */
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-size: 14px;
+            z-index: 2000;
+            transition: transform 0.3s ease-in-out;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        #toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
     </style>
 </head>
-<body class="bg-white">
+<body>
 
     <div id="map"></div>
+
+    <!-- GPSボタン -->
+    <button id="gps-btn" title="現在地を表示">
+        <i class="fa-solid fa-location-crosshairs text-xl text-gray-700"></i>
+    </button>
+
+    <!-- 通知エリア -->
+    <div id="toast"></div>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
     <script>
         // ============================================================================
-        // ★ データ編集エリア (ここに場所を追加・修正してください) ★
+        // ★ スポットデータ (全30件反映済み) ★
         // ============================================================================
 
         const spotsData = [
-            // --- 観光名所 (sight) ---
+            // --- 見どころ・文化財 (Sightseeing) ---
             { 
                 id: 1, 
                 name: "和田家住宅", 
                 type: "sight", 
-                lat: 36.25835, lng: 136.90695, // Plus Code: 7W55+X3
-                description: "国指定重要文化財。",
+                lat: 36.258356, lng: 136.906963, 
+                description: "国指定重要文化財。集落最大規模の合掌造り。",
                 image: "https://placehold.co/600x400?text=Wada+House",
-                details: "営業時間: 9:00-17:00"
+                details: "9:00-17:00 / 大人400円",
+                website: "https://shirakawa-go.gr.jp/active/13/"
             },
-            { 
-                id: 4, 
-                name: "合掌造り民家園", 
-                type: "sight", 
-                lat: 36.25410, lng: 136.90190, // Plus Code: 7W42+2W
-                description: "合掌造りの建物が移築保存されている野外博物館。",
-                image: "https://placehold.co/600x400?text=Minkaen",
-                details: "入園料あり"
-            },
-            { 
-                id: 5, 
-                name: "田島家", 
-                type: "sight", 
-                lat: 36.25290, lng: 136.90220, // Plus Code: 7W33+57
-                description: "民家園内にある伝統家屋。",
-                image: "https://placehold.co/600x400?text=Tajima+House",
-                details: ""
-            },
-            { 
-                id: 12, 
-                name: "白川八幡神社", 
-                type: "sight", 
-                lat: 36.25480, lng: 136.90570, // Plus Code: 7W34+W8
-                description: "どぶろく祭りで有名な神社。",
-                image: "https://placehold.co/600x400?text=Hachiman+Shrine",
-                details: ""
-            },
-            {
-                id: 6,
-                name: "浅野忠一家",
-                type: "sight",
-                lat: 36.25350, lng: 136.90400, // Plus Code: 7V3X+RR (推定位置)
-                description: "伝統的な家屋。",
-                image: "https://placehold.co/600x400?text=Asano+House",
-                details: ""
-            },
-
-            // --- 飲食店・宿 (food / hotel) ---
             { 
                 id: 2, 
-                name: "お食事処 いろり", 
-                type: "food", 
-                lat: 36.25610, lng: 136.90560, // Plus Code: 7W64+9Q
-                description: "郷土料理のお店。",
-                image: "https://placehold.co/600x400?text=Irori",
-                details: "焼き豆腐定食など"
-            },
-            { 
-                id: 13, 
-                name: "花水木白川", 
-                type: "food", 
-                lat: 36.25740, lng: 136.90500, // Plus Code: 7W43+XX
-                description: "お土産・喫茶。",
-                image: "https://placehold.co/600x400?text=Hanamizuki",
-                details: ""
-            },
-            { 
-                id: 7, 
-                name: "民宿 文六", 
-                type: "food", // 民宿ですが便宜上food/hotelアイコン
-                lat: 36.25845, lng: 136.90885, // Plus Code: 7V3X+RR (修正済)
-                description: "合掌造りの民宿。",
-                image: "https://placehold.co/600x400?text=Bunroku",
-                details: ""
-            },
-
-            // --- 駐車場・交通 (transport) ---
-            { 
-                id: 9, 
-                name: "荻町バスターミナル", 
-                type: "transport", 
-                lat: 36.26050, lng: 136.90750, // Plus Code: 7W64+QQ
-                description: "高速バス発着所。",
-                image: "https://placehold.co/600x400?text=Bus+Terminal",
-                details: "観光案内所あり"
-            },
-            { 
-                id: 10, 
-                name: "せせらぎ公園駐車場", 
-                type: "transport", 
-                lat: 36.25670, lng: 136.90240, // Plus Code: 7W43+Q2
-                description: "メインの村営駐車場。",
-                image: "https://placehold.co/600x400?text=Seseragi+Parking",
-                details: "普通車 1000円"
-            },
-            { 
-                id: 8, 
-                name: "寺尾駐車場", 
-                type: "transport", 
-                lat: 36.25200, lng: 136.90500, // Plus Code: 7W63+7F (南側臨時P付近)
-                description: "臨時駐車場エリア。",
-                image: "https://placehold.co/600x400?text=Terao+Parking",
-                details: "混雑時のみ開放"
-            },
-            { 
-                id: 11, 
-                name: "みだしま公園駐車場", 
-                type: "transport", 
-                lat: 36.25300, lng: 136.90300, // Plus Code: 7W33+JG
-                description: "臨時駐車場。",
-                image: "https://placehold.co/600x400?text=Midashima",
-                details: ""
+                name: "神田家住宅", 
+                type: "sight", 
+                lat: 36.257785, lng: 136.906509, 
+                description: "江戸後期の建築。中二階が見学可能。",
+                image: "https://placehold.co/600x400?text=Kanda+House",
+                details: "9:00-17:00 / 大人400円",
+                website: "https://shirakawa-go.gr.jp/active/14/"
             },
             { 
                 id: 3, 
-                name: "出会いの館", 
+                name: "長瀬家住宅", 
+                type: "sight", 
+                lat: 36.257364, lng: 136.906233, 
+                description: "5階建ての合掌造り。巨大な仏壇や美術品が見どころ。",
+                image: "https://placehold.co/600x400?text=Nagase+House",
+                details: "9:00-17:00 / 大人400円",
+                website: "https://shirakawa-go.gr.jp/active/15/"
+            },
+            { 
+                id: 4, 
+                name: "明善寺庫庫・郷土館", 
+                type: "sight", 
+                lat: 36.256686, lng: 136.905953, 
+                description: "県指定重要文化財。茅葺きの鐘楼門が有名。",
+                image: "https://placehold.co/600x400?text=Myozenji",
+                details: "9:00-17:00 / 大人400円",
+                website: "https://shirakawa-go.gr.jp/active/16/"
+            },
+            { 
+                id: 5, 
+                name: "城山天守閣展望台", 
+                type: "sight", 
+                lat: 36.264150, lng: 136.908200, 
+                description: "集落を一望できる絶景スポット。シャトルバスあり。",
+                image: "https://placehold.co/600x400?text=Viewpoint",
+                details: "9:00-16:00 (食事処)",
+                website: "https://shirakawa-go.gr.jp/active/105/"
+            },
+            { 
+                id: 6, 
+                name: "白川八幡神社", 
+                type: "sight", 
+                lat: 36.254845, lng: 136.905763, 
+                description: "どぶろく祭りの神社。「ひぐらし」の聖地としても有名。",
+                image: "https://placehold.co/600x400?text=Hachiman+Shrine",
+                details: "参拝自由",
+                website: "https://shirakawa-go.gr.jp/active/19/"
+            },
+            { 
+                id: 7, 
+                name: "野外博物館 合掌造り民家園", 
+                type: "sight", 
+                lat: 36.254133, lng: 136.901968, 
+                description: "県重文を含む25棟の合掌造りを保存・公開。",
+                image: "https://placehold.co/600x400?text=Minkaen",
+                details: "8:40-17:00 / 大人600円",
+                website: "https://www.shirakawago-minkaen.jp/"
+            },
+            { 
+                id: 8, 
+                name: "出会い橋", 
+                type: "sight", 
+                lat: 36.256200, lng: 136.903500, 
+                description: "駐車場と集落を結ぶ全長107mの吊り橋。",
+                image: "https://placehold.co/600x400?text=Deai+Bridge",
+                details: "通行自由",
+                website: ""
+            },
+            { 
+                id: 9, 
+                name: "三小屋（撮影スポット）", 
+                type: "sight", 
+                lat: 36.251800, lng: 136.906800, 
+                description: "3つの小屋が並ぶ人気の撮影スポット。田園風景が美しい。",
+                image: "https://placehold.co/600x400?text=Three+Huts",
+                details: "外観のみ見学可",
+                website: ""
+            },
+            { 
+                id: 10, 
+                name: "本覚寺", 
+                type: "sight", 
+                lat: 36.258600, lng: 136.905500, 
+                description: "和田家の近くにあるお寺。",
+                image: "https://placehold.co/600x400?text=Hongakuji",
+                details: "参拝自由",
+                website: ""
+            },
+
+            // --- 飲食店・カフェ (Food) ---
+            { 
+                id: 11, 
+                name: "お食事処 いろり", 
+                type: "food", 
+                lat: 36.256156, lng: 136.905658, 
+                description: "合掌造りの店内で郷土料理を味わえる。",
+                image: "https://placehold.co/600x400?text=Irori",
+                details: "10:00-14:00 / 不定休",
+                website: "https://shirakawa-go.gr.jp/shop/32/"
+            },
+            { 
+                id: 12, 
+                name: "白川郷 お食事処 しらおぎ", 
+                type: "food", 
+                lat: 36.259800, lng: 136.907300, 
+                description: "飛騨牛の朴葉味噌焼き定食が人気。",
+                image: "https://placehold.co/600x400?text=Shiraogi",
+                details: "9:00-17:00",
+                website: "https://shirakawa-go.gr.jp/shop/36/"
+            },
+            { 
+                id: 13, 
+                name: "喫茶 落人（おちうど）", 
+                type: "food", 
+                lat: 36.257100, lng: 136.906400, 
+                description: "囲炉裏のある喫茶店。カレーとコーヒーが名物。",
+                image: "https://placehold.co/600x400?text=Ochiudo",
+                details: "10:30-17:00 / 不定休",
+                website: "https://shirakawa-go.gr.jp/shop/34/"
+            },
+            { 
+                id: 14, 
+                name: "手打ちそば処 乃むら", 
+                type: "food", 
+                lat: 36.256300, lng: 136.904800, 
+                description: "こだわりの手打ちそば。",
+                image: "https://placehold.co/600x400?text=Nomura",
+                details: "11:00-なくなり次第終了",
+                website: "https://shirakawa-go.gr.jp/shop/31/"
+            },
+            { 
+                id: 15, 
+                name: "白川郷 ぷりんの家", 
+                type: "food", 
+                lat: 36.257000, lng: 136.904600, 
+                description: "地元の素材を使ったなめらかプリン専門店。",
+                image: "https://placehold.co/600x400?text=Pudding",
+                details: "10:00-16:30 / 水曜定休",
+                website: "https://purin-no-ie.com/"
+            },
+            { 
+                id: 16, 
+                name: "今藤商店（酒店・飛騨牛コロッケ）", 
+                type: "food", 
+                lat: 36.255900, lng: 136.905400, 
+                description: "地酒と飛騨牛コロッケなどの食べ歩きグルメ。",
+                image: "https://placehold.co/600x400?text=Kondo+Shoten",
+                details: "9:00-17:00",
+                website: "https://shirakawa-go.gr.jp/shop/33/"
+            },
+            { 
+                id: 17, 
+                name: "花水木", 
+                type: "food", 
+                lat: 36.257425, lng: 136.905019, 
+                description: "お土産・喫茶。ソフトクリームなど。",
+                image: "https://placehold.co/600x400?text=Hanamizuki",
+                details: "9:00-17:00",
+                website: ""
+            },
+            { 
+                id: 18, 
+                name: "お食事処 けやき", 
+                type: "food", 
+                lat: 36.254600, lng: 136.903800, 
+                description: "民家園の入り口近くにある食堂。",
+                image: "https://placehold.co/600x400?text=Keyaki",
+                details: "9:00-16:00",
+                website: ""
+            },
+
+            // --- 宿泊施設 (Accommodations) ---
+            { 
+                id: 19, 
+                name: "民宿 孫右ェ門", 
+                type: "food", 
+                lat: 36.256800, lng: 136.905300, 
+                description: "合掌造りの宿。写真スポットとしても有名。",
+                image: "https://placehold.co/600x400?text=Magoemon",
+                details: "宿泊のみ",
+                website: "https://shirakawa-go.gr.jp/stay/54/"
+            },
+            { 
+                id: 20, 
+                name: "民宿 かんじや", 
+                type: "food", 
+                lat: 36.258800, lng: 136.907800, 
+                description: "眺めの良い高台にある合掌造りの宿。",
+                image: "https://placehold.co/600x400?text=Kanjiya",
+                details: "宿泊のみ",
+                website: "https://shirakawa-go.gr.jp/stay/60/"
+            },
+            { 
+                id: 21, 
+                name: "民宿 幸エ門", 
+                type: "food", 
+                lat: 36.257500, lng: 136.905800, 
+                description: "明善寺の近くにある民宿。",
+                image: "https://placehold.co/600x400?text=Koemon",
+                details: "宿泊のみ",
+                website: "https://shirakawa-go.gr.jp/stay/56/"
+            },
+            { 
+                id: 22, 
+                name: "城山館", 
+                type: "food", 
+                lat: 36.259200, lng: 136.907200, 
+                description: "国重要伝統的建造物の宿。料理が評判。",
+                image: "https://placehold.co/600x400?text=Shiroyamakan",
+                details: "宿泊のみ",
+                website: "https://shiroyamakan.jp/"
+            },
+            { 
+                id: 23, 
+                name: "民宿 十右エ門", 
+                type: "food", 
+                lat: 36.259500, lng: 136.906800, 
+                description: "和田家の北側にある静かなお宿。",
+                image: "https://placehold.co/600x400?text=Juemon",
+                details: "宿泊のみ",
+                website: ""
+            },
+            { 
+                id: 24, 
+                name: "民宿 文六", 
+                type: "food", 
+                lat: 36.258449, lng: 136.908848, 
+                description: "静かな環境で過ごせる合掌造りの宿。",
+                image: "https://placehold.co/600x400?text=Bunroku",
+                details: "宿泊のみ",
+                website: ""
+            },
+
+            // --- 温泉・交通・その他 (Transport/Other) ---
+            { 
+                id: 25, 
+                name: "白川郷の湯", 
+                type: "sight", 
+                lat: 36.259100, lng: 136.906500, 
+                description: "集落内唯一の天然温泉。日帰り入浴可。",
+                image: "https://placehold.co/600x400?text=Onsen",
+                details: "7:00-21:30 / 大人700円",
+                website: "http://www.shirakawagou-onsen.jp/"
+            },
+            { 
+                id: 26, 
+                name: "白川郷バスターミナル", 
                 type: "transport", 
-                lat: 36.25550, lng: 136.90310, // Plus Code: 7W43+J3
-                description: "せせらぎ公園内の案内施設。",
-                image: "https://placehold.co/600x400?text=Deai+no+Yakata",
-                details: "トイレ・休憩所あり"
+                lat: 36.260500, lng: 136.907500, 
+                description: "高速バスの発着所。観光案内所・コインロッカーあり。",
+                image: "https://placehold.co/600x400?text=Bus+Terminal",
+                details: "8:30-17:30",
+                website: ""
+            },
+            { 
+                id: 27, 
+                name: "村営せせらぎ公園駐車場", 
+                type: "transport", 
+                lat: 36.256703, lng: 136.902439, 
+                description: "メインの公共駐車場。ここから出会い橋を渡る。",
+                image: "https://placehold.co/600x400?text=Parking",
+                details: "普通車1,000円",
+                website: ""
+            },
+            { 
+                id: 28, 
+                name: "寺尾臨時駐車場", 
+                type: "transport", 
+                lat: 36.251900, lng: 136.905000, 
+                description: "混雑時のみ開場される南側の駐車場。",
+                image: "https://placehold.co/600x400?text=Terao+Parking",
+                details: "混雑時のみ",
+                website: ""
+            },
+            { 
+                id: 29, 
+                name: "荻町公園（休憩所）", 
+                type: "transport", 
+                lat: 36.255200, lng: 136.905500, 
+                description: "集落の中心にある公園。休憩に最適。",
+                image: "https://placehold.co/600x400?text=Park",
+                details: "トイレあり",
+                website: ""
+            },
+            { 
+                id: 30, 
+                name: "総合案内所（出会いの館）", 
+                type: "transport", 
+                lat: 36.255577, lng: 136.903080, 
+                description: "せせらぎ公園駐車場内にある案内所。",
+                image: "https://placehold.co/600x400?text=Info+Center",
+                details: "8:30-17:00",
+                website: ""
             }
         ];
 
@@ -180,21 +456,24 @@
         // ============================================================================
 
         // --- 1. 地図の初期化 ---
-        // 表示範囲の中心
-        const center = [36.2583, 136.9042]; 
+        // 和田家付近を中心点に設定
+        const center = [36.2570, 136.9050]; 
         const map = L.map('map', { 
             zoomControl: false, 
             minZoom: 15,
-            maxZoom: 18
+            maxZoom: 18,
+            // 範囲外へのスクロールを制限
+            maxBoundsViscosity: 1.0 
         }).setView(center, 16);
 
-        // --- 2. AI生成マップ(イラスト)の表示 ---
+        // --- 2. イラストマップの表示 ---
         const imageUrl = 'https://raw.githubusercontent.com/iida-mdg/3Dgraph/main/Gemini_Generated_Image_2c2cbj2c2cbj2c2c.png';
         
-        // 画像配置エリアの設定 (北西, 南東)
+        // 画像の表示範囲 (北西, 南東)
+        // ※この範囲外を「範囲外」として扱います
         const imageBounds = [
-            [36.263833, 136.898583], // 北西端
-            [36.252861, 136.909861]  // 南東端
+            [36.263833, 136.898583], // 北西
+            [36.252861, 136.909861]  // 南東
         ];
 
         L.imageOverlay(imageUrl, imageBounds, {
@@ -202,18 +481,13 @@
             interactive: false 
         }).addTo(map);
 
-        // スクロール範囲の制限
-        const maxBounds = L.latLngBounds(
-            [36.2500, 136.8950], 
-            [36.2660, 136.9150]
-        );
-        map.setMaxBounds(maxBounds);
+        // マップの移動可能範囲を設定
+        map.setMaxBounds(imageBounds);
 
-        // --- 3. アイコンデザイン ---
+        // --- 3. アイコン設定 ---
         function getIconColor(type) {
             if (type === 'food') return 'text-orange-500';
             if (type === 'sight') return 'text-indigo-500';
-            if (type === 'toilet') return 'text-cyan-500';
             if (type === 'transport') return 'text-green-600';
             return 'text-gray-500';
         }
@@ -221,12 +495,11 @@
         function getIconClass(type) {
             if (type === 'food') return 'fa-utensils';
             if (type === 'sight') return 'fa-camera';
-            if (type === 'toilet') return 'fa-restroom';
-            if (type === 'transport') return 'fa-square-parking'; // 駐車場アイコン
+            if (type === 'transport') return 'fa-location-dot'; 
             return 'fa-location-dot';
         }
 
-        // --- 4. マーカー配置処理 ---
+        // --- 4. マーカー配置 ---
         spotsData.forEach(spot => {
             const colorClass = getIconColor(spot.type);
             const iconClass = getIconClass(spot.type);
@@ -241,19 +514,120 @@
                 popupAnchor: [0, -28]
             });
 
+            // ウェブサイトボタン
+            let websiteBtn = '';
+            if (spot.website) {
+                websiteBtn = `<a href="${spot.website}" target="_blank" class="popup-btn">公式サイトを見る</a>`;
+            }
+
             L.marker([spot.lat, spot.lng], { icon: customIcon })
                 .bindPopup(`
                     <div style="width: 180px;">
                         <img src="${spot.image}" class="popup-image" alt="${spot.name}">
                         <h3 class="font-bold text-base text-gray-800 mb-1 border-b pb-1">${spot.name}</h3>
                         <p class="text-xs text-gray-600 mb-2">${spot.description}</p>
-                        <div class="bg-gray-50 p-1.5 rounded text-[10px] text-gray-700 leading-relaxed">
+                        <div class="bg-gray-50 p-1.5 rounded text-[10px] text-gray-700 leading-relaxed mb-2">
                             ${spot.details}
+                        </div>
+                        <div class="text-center">
+                            ${websiteBtn}
                         </div>
                     </div>
                 `)
                 .addTo(map);
         });
+
+        // ============================================================================
+        // ★ GPS (現在地) 機能の実装 ★
+        // ============================================================================
+
+        const gpsBtn = document.getElementById('gps-btn');
+        let myLocationMarker = null;
+
+        // LeafletのBoundsオブジェクトを作成（範囲判定用）
+        const mapArea = L.latLngBounds(imageBounds);
+
+        // トースト通知を表示する関数
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            
+            // 3秒後に消す
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        gpsBtn.addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                showToast("GPS機能が使えません");
+                return;
+            }
+
+            // ローディング中の演出としてアイコンを回転させる
+            const icon = gpsBtn.querySelector('i');
+            icon.classList.add('fa-spin');
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    // 成功時
+                    icon.classList.remove('fa-spin');
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    const userLocation = L.latLng(lat, lng);
+
+                    // 1. 範囲内かチェック
+                    if (mapArea.contains(userLocation)) {
+                        
+                        // 既にマーカーがあれば削除
+                        if (myLocationMarker) {
+                            map.removeLayer(myLocationMarker);
+                        }
+
+                        // 現在地マーカーアイコン（パルスアニメーション）
+                        const myIcon = L.divIcon({
+                            className: 'my-location-icon',
+                            html: '<div class="gps-marker-icon w-4 h-4"></div>',
+                            iconSize: [16, 16],
+                            iconAnchor: [8, 8]
+                        });
+
+                        // マーカーを追加して地図移動
+                        myLocationMarker = L.marker([lat, lng], { icon: myIcon }).addTo(map);
+                        map.flyTo([lat, lng], 17); // アニメーション付きで移動
+                        
+                        showToast("現在地を表示しました");
+                        
+                        // 自分の位置のポップアップも出せるが、邪魔になるので今回はなし
+
+                    } else {
+                        // 2. 範囲外の場合
+                        showToast("現在地は地図の範囲外です");
+                        
+                        // デバッグ用: 実際にどれくらい離れているかコンソールに出す
+                        console.log("User Location:", lat, lng);
+                        console.log("Map Bounds:", imageBounds);
+                    }
+                },
+                (error) => {
+                    // エラー時
+                    icon.classList.remove('fa-spin');
+                    console.error(error);
+                    let msg = "位置情報の取得に失敗しました";
+                    if(error.code === 1) msg = "位置情報の利用が許可されていません";
+                    if(error.code === 2) msg = "位置情報が取得できませんでした";
+                    if(error.code === 3) msg = "タイムアウトしました";
+                    showToast(msg);
+                },
+                {
+                    enableHighAccuracy: true, // 高精度モード
+                    timeout: 5000,
+                    maximumAge: 0
+                }
+            );
+        });
+
     </script>
 </body>
 </html>
